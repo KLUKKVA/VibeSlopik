@@ -1,0 +1,39 @@
+# User data and secrets
+data/
+.vibeslopik-token
+.vibeslopik-relay-admin-key
+.vibeslopik-relay.txt
+.thread-*.json
+.relay-*.log
+*.env
+!.env.example
+
+# Local Codex and workspace state
+.codex-remote-attachments/
+.codex-schema/
+.agents/
+tools/
+
+# Proprietary/local build dependencies
+sdk/
+.wsl-build/
+.tmp-app-server-schema/
+.tmp-desktop-schema/
+.test-venv/
+
+# Generated output and dependency caches
+dist/
+build/
+.gocache/
+node_modules/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.log
+.DS_Store
+
+# Theos output
+ios/LegacyRemote/.theos/
+ios/LegacyRemote/packages/
+ios/LegacyRemote/obj/

@@ -1,0 +1,150 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  relay:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+      - name: Test Relay with race detector
+        working-directory: relay-go
+        run: go test -race -count=3 ./...
+      - name: Vet Relay
+        working-directory: relay-go
+        run: go vet ./...
+      - name: Cross-build Relay
+        run: |
+          mkdir -p dist
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go -C relay-go build -trimpath -ldflags="-s -w" -o ../dist/vibeslopik-relay-linux-amd64 .
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go -C relay-go build -trimpath -ldflags="-s -w" -o ../dist/vibeslopik-relay-linux-arm64 .
+          ./dist/vibeslopik-relay-linux-amd64 --check
+      - uses: actions/upload-artifact@v4
+        with:
+          name: relay-binaries
+          path: dist/vibeslopik-relay-linux-*
+
+  relay-installer:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: {go-version: "1.22.x"}
+      - name: Shell lint
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          shellcheck -s sh scripts/install-relay-vps.sh scripts/vibeslopik-relay-manager.sh
+      - name: Build local Relay
+        run: CGO_ENABLED=0 go -C relay-go build -trimpath -o ../vibeslopik-relay-test .
+      - name: Clean install, repeat install and rollback-safe management
+        run: |
+          cat > /tmp/broken-relay <<'EOF'
+          #!/bin/sh
+          [ "${1:-}" = "--check" ] && exit 0
+          exit 1
+          EOF
+          chmod +x /tmp/broken-relay
+          if sudo env VIBESLOPIK_RELAY_BINARY=/tmp/broken-relay VIBESLOPIK_RELAY_INSTALL_PORT=18787 VIBESLOPIK_RELAY_READY_TIMEOUT=2 VIBESLOPIK_LANG=en sh scripts/install-relay-vps.sh </dev/null; then
+            echo "Broken first install unexpectedly succeeded" >&2
+            exit 1
+          fi
+          test ! -e /opt/vibeslopik-relay/vibeslopik-relay
+          test ! -e /etc/vibeslopik-relay.env
+          test ! -e /etc/systemd/system/vibeslopik-relay.service
+          test ! -e /usr/local/sbin/vibeslopik-relay
+          test ! -d /opt/vibeslopik-relay
+          sudo env VIBESLOPIK_RELAY_BINARY="$PWD/vibeslopik-relay-test" VIBESLOPIK_RELAY_INSTALL_PORT=18788 VIBESLOPIK_LANG=en sh scripts/install-relay-vps.sh </dev/null
+          curl --fail http://127.0.0.1:18788/healthz
+          sudo env VIBESLOPIK_RELAY_BINARY="$PWD/vibeslopik-relay-test" VIBESLOPIK_RELAY_INSTALL_PORT=18788 VIBESLOPIK_LANG=en sh scripts/install-relay-vps.sh </dev/null
+          sudo vibeslopik-relay diagnostics
+          sudo vibeslopik-relay set-port 18789
+          curl --fail http://127.0.0.1:18789/healthz
+          cp /etc/vibeslopik-relay.env /tmp/relay-env.before
+          cp /opt/vibeslopik-relay/vibeslopik-relay /tmp/relay-bin.before
+          if sudo env VIBESLOPIK_RELAY_BINARY=/tmp/broken-relay VIBESLOPIK_RELAY_INSTALL_PORT=18790 VIBESLOPIK_RELAY_READY_TIMEOUT=2 VIBESLOPIK_LANG=en sh scripts/install-relay-vps.sh </dev/null; then
+            echo "Broken upgrade unexpectedly succeeded" >&2
+            exit 1
+          fi
+          cmp /tmp/relay-env.before /etc/vibeslopik-relay.env
+          cmp /tmp/relay-bin.before /opt/vibeslopik-relay/vibeslopik-relay
+          curl --fail http://127.0.0.1:18789/healthz
+          sudo vibeslopik-relay uninstall --keep-data
+          sudo rm -rf /opt/vibeslopik-relay /etc/vibeslopik-relay.env
+
+  host:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2022
+            target: windows-x64
+          - runner: ubuntu-24.04
+            target: linux-x64
+          - runner: macos-15-intel
+            target: macos-x64
+          - runner: macos-15
+            target: macos-arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install -e .
+      - run: python -m unittest discover -s tests -v
+      - run: python scripts/test-python-host.py
+      - run: python scripts/build-host.py --install-build-deps --expect-target ${{ matrix.target }}
+      - run: python scripts/test-host-package.py
+      - run: python scripts/build-speech-pack.py --install-build-deps --expect-target ${{ matrix.target }}
+      - run: python scripts/test-speech-package.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: host-${{ matrix.target }}
+          path: |
+            dist/vibeslopik-host-*.zip
+            dist/vibeslopik-speech-*.zip
+
+  integration:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+      - run: python -m pip install -e .
+      - run: python scripts/test-python-relay.py
+
+  secrets:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Audit public tree
+        run: |
+          python scripts/audit-public-tree.py --tracked
+          python scripts/test-ios-source.py
+          python scripts/test-release-assets.py
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,92 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - uses: actions/setup-go@v5
+        with: {go-version: "1.22.x"}
+      - run: python -m pip install -e .
+      - run: python -m unittest discover -s tests -v
+      - run: python scripts/test-python-host.py
+      - run: python scripts/test-python-relay.py
+      - run: python scripts/audit-public-tree.py --tracked
+      - run: python scripts/test-ios-source.py
+      - run: python scripts/test-release-assets.py
+      - name: Test and vet Relay
+        working-directory: relay-go
+        run: |
+          go test -race -count=3 ./...
+          go vet ./...
+
+  relay:
+    needs: preflight
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: {go-version: "1.22.x"}
+      - run: |
+          mkdir -p artifacts
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go -C relay-go build -trimpath -ldflags="-s -w" -o ../artifacts/vibeslopik-relay-linux-amd64 .
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go -C relay-go build -trimpath -ldflags="-s -w" -o ../artifacts/vibeslopik-relay-linux-arm64 .
+          cp scripts/vibeslopik-relay-manager.sh scripts/install-relay-vps.sh artifacts/
+      - uses: actions/upload-artifact@v4
+        with: {name: release-relay, path: artifacts/*}
+
+  host:
+    needs: preflight
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2022
+            target: windows-x64
+          - runner: ubuntu-24.04
+            target: linux-x64
+          - runner: macos-15-intel
+            target: macos-x64
+          - runner: macos-15
+            target: macos-arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: python scripts/build-host.py --install-build-deps --expect-target ${{ matrix.target }}
+      - run: python scripts/test-host-package.py
+      - run: python scripts/build-speech-pack.py --install-build-deps --expect-target ${{ matrix.target }}
+      - run: python scripts/test-speech-package.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-host-${{ matrix.target }}
+          path: |
+            dist/vibeslopik-host-*.zip
+            dist/vibeslopik-speech-*.zip
+
+  publish:
+    needs: [relay, host]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: {pattern: release-*, path: artifacts, merge-multiple: true}
+      - name: Verify exact draft assets and create checksums
+        run: python scripts/verify-release-assets.py artifacts --allow-missing-ipa --write
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true
+          draft: true

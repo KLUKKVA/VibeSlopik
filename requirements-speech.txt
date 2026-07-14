@@ -1,0 +1,2 @@
+# Optional local speech-to-text backend. It is not needed when speech is disabled.
+faster-whisper>=1.1,<2

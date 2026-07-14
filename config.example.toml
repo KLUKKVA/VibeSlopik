@@ -1,0 +1,30 @@
+# Created automatically as data/config.toml. Prefer the interactive menu.
+
+[app]
+language = "en"
+configured = false
+
+[host]
+bind = "127.0.0.1"
+port = 8787
+default_cwd = "C:/Projects"
+codex_bin = "codex"
+codex_args_json = "[\"app-server\"]"
+compatibility_mode = "normal"
+
+[relay]
+url = "https://YOUR_VPS:8788"
+host_id = "my-computer"
+enabled = true
+
+[speech]
+enabled = false
+backend = "faster-whisper"
+profile = "recommended"
+idle_unload_seconds = 300
+
+[cache]
+max_mebibytes = 1024
+media_mebibytes = 128
+attachment_days = 30
+tmp_hours = 1

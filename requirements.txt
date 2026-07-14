@@ -1,0 +1,5 @@
+# Host-side thumbnails keep large images out of the iPhone 4s memory.
+Pillow>=10,<13
+
+# Optional local speech recognition is installed only when enabled:
+# python -m pip install -r requirements-speech.txt
