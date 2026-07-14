@@ -30,7 +30,7 @@ fi
 case "$LANGUAGE" in ru|en) ;; *) LANGUAGE=en ;; esac
 
 [ -r /etc/os-release ] || die "Unsupported Linux: /etc/os-release is missing"
-# shellcheck source=/etc/os-release
+# shellcheck disable=SC1091 -- validated as readable immediately above.
 . /etc/os-release
 case "${ID:-}:${VERSION_ID:-}" in
     ubuntu:22.04|ubuntu:24.04|debian:12|debian:13) ;;
