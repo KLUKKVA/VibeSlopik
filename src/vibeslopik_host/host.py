@@ -578,10 +578,12 @@ class Handler(BaseHTTPRequestHandler):
 
     def _json(self, status: int, body: dict) -> None:
         raw = json.dumps(body, ensure_ascii=False).encode("utf-8")
+        self.close_connection = True
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(raw)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("Connection", "close")
         self.end_headers()
         self.wfile.write(raw)
 
