@@ -109,7 +109,13 @@ rollback_install() {
         systemctl disable vibeslopik-relay.service >/dev/null 2>&1 || true
     fi
     if [ "$WAS_ACTIVE" = "1" ]; then
-        systemctl restart vibeslopik-relay.service >/dev/null 2>&1 || true
+        if systemctl restart vibeslopik-relay.service >/dev/null 2>&1; then
+            ROLLBACK_TIMEOUT=${VIBESLOPIK_RELAY_ROLLBACK_TIMEOUT:-20}
+            case "$ROLLBACK_TIMEOUT" in *[!0-9]*|'') ROLLBACK_TIMEOUT=20 ;; esac
+            if ! "$MANAGER" wait-ready "$ROLLBACK_TIMEOUT"; then
+                msg "Прежние файлы восстановлены, но Relay ещё не отвечает. Проверьте: vibeslopik-relay diagnostics" "Previous files were restored, but Relay is not responding yet. Run: vibeslopik-relay diagnostics"
+            fi
+        fi
     else
         systemctl stop vibeslopik-relay.service >/dev/null 2>&1 || true
     fi
