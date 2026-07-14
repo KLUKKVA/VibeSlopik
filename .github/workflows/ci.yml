@@ -84,6 +84,41 @@ jobs:
           sudo vibeslopik-relay uninstall --keep-data
           sudo rm -rf /opt/vibeslopik-relay /etc/vibeslopik-relay.env
 
+  relay-installer-debian:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - version: "12"
+            suite: bookworm
+          - version: "13"
+            suite: trixie
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: {go-version: "1.22.x"}
+      - name: Build local Relay
+        run: CGO_ENABLED=0 go -C relay-go build -trimpath -o ../vibeslopik-relay-test .
+      - name: Boot Debian ${{ matrix.version }} with systemd
+        run: |
+          docker build --build-arg DEBIAN_SUITE=${{ matrix.suite }} -f scripts/debian-systemd.Dockerfile -t vibeslopik-debian:${{ matrix.version }} .
+          docker run --privileged --cgroupns=private --tmpfs /run --tmpfs /run/lock --detach --name vibeslopik-debian vibeslopik-debian:${{ matrix.version }}
+          trap 'docker logs vibeslopik-debian; docker rm --force vibeslopik-debian' EXIT
+          for attempt in $(seq 1 30); do
+            state=$(docker exec vibeslopik-debian systemctl is-system-running 2>/dev/null || true)
+            case "$state" in running|degraded) break ;; esac
+            [ "$attempt" -lt 30 ] || { echo "Debian systemd did not become ready: $state" >&2; exit 1; }
+            sleep 1
+          done
+          docker cp . vibeslopik-debian:/workspace
+          docker exec vibeslopik-debian sh /workspace/scripts/test-relay-installer-debian.sh
+          docker exec vibeslopik-debian systemctl poweroff
+          for attempt in $(seq 1 20); do
+            docker inspect --format '{{.State.Running}}' vibeslopik-debian 2>/dev/null | grep -q false && break
+            sleep 1
+          done
+
   host:
     strategy:
       fail-fast: false
