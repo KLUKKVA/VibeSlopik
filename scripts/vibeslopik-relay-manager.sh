@@ -18,7 +18,9 @@ ready() {
 wait_ready() { end=$(( $(date +%s) + ${1:-20} )); while [ "$(date +%s)" -lt "$end" ]; do ready && return 0; sleep 1; done; return 1; }
 diagnostics() {
     label "Диагностика VibeSlopik Relay\n" "VibeSlopik Relay diagnostics\n"
-    printf '%s: %s\n' "$(label "ОС" "OS")" "$(. /etc/os-release; echo "${PRETTY_NAME:-unknown}")"
+    os_name=$(sed -n 's/^PRETTY_NAME=//p' /etc/os-release 2>/dev/null | head -n 1)
+    os_name=${os_name#\"}; os_name=${os_name%\"}
+    printf '%s: %s\n' "$(label "ОС" "OS")" "${os_name:-unknown}"
     printf '%s: %s\n' "$(label "Архитектура" "Architecture")" "$(uname -m)"
     printf '%s: %s\n' "$(label "Порт" "Port")" "$(port || true)"
     printf '%s: %s\n' "$(label "Служба" "Service")" "$(systemctl is-active "$SERVICE" 2>/dev/null || true)"
@@ -36,7 +38,7 @@ credentials() {
 set_port() {
     new=${1:-}
     case "$new" in *[!0-9]*|'') echo "Port must be numeric / Порт должен быть числом" >&2; return 2 ;; esac
-    [ "$new" -ge 1024 ] && [ "$new" -le 65535 ] || { echo "Port must be 1024..65535" >&2; return 2; }
+    if [ "$new" -lt 1024 ] || [ "$new" -gt 65535 ]; then echo "Port must be 1024..65535" >&2; return 2; fi
     old=$(port)
     [ "$new" = "$old" ] && { echo "Port is unchanged / Порт не изменён"; return 0; }
     if command -v ss >/dev/null 2>&1 && ss -H -ltn "sport = :$new" 2>/dev/null | grep -q .; then echo "Port $new is occupied / Порт занят" >&2; return 2; fi

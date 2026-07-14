@@ -30,6 +30,7 @@ fi
 case "$LANGUAGE" in ru|en) ;; *) LANGUAGE=en ;; esac
 
 [ -r /etc/os-release ] || die "Unsupported Linux: /etc/os-release is missing"
+# shellcheck source=/etc/os-release
 . /etc/os-release
 case "${ID:-}:${VERSION_ID:-}" in
     ubuntu:22.04|ubuntu:24.04|debian:12|debian:13) ;;
@@ -55,7 +56,7 @@ if [ -f "$ENV_FILE" ]; then
 fi
 PORT=${VIBESLOPIK_RELAY_INSTALL_PORT:-$(prompt "Relay port / Порт Relay" "$CURRENT_PORT")}
 case "$PORT" in *[!0-9]*|'') die "Port must be a number / Порт должен быть числом" ;; esac
-[ "$PORT" -ge 1024 ] && [ "$PORT" -le 65535 ] || die "Use a port from 1024 to 65535"
+if [ "$PORT" -lt 1024 ] || [ "$PORT" -gt 65535 ]; then die "Use a port from 1024 to 65535"; fi
 
 if command -v ss >/dev/null 2>&1 && ss -H -ltn "sport = :$PORT" 2>/dev/null | grep -q .; then
     if [ "$PORT" != "${SAVED_PORT:-}" ] || ! systemctl is-active --quiet vibeslopik-relay.service 2>/dev/null; then
