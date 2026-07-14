@@ -33,7 +33,8 @@ def main() -> int:
             executable = Path(directory) / candidates[0]
             if os.name != "nt":
                 executable.chmod(executable.stat().st_mode | stat.S_IXUSR)
-            completed = subprocess.run([str(executable), "--help"], capture_output=True, text=True, timeout=30)
+            smoke_environment = {**os.environ, "PYTHONIOENCODING": "cp1252"}
+            completed = subprocess.run([str(executable), "--help"], capture_output=True, text=True, encoding="utf-8", env=smoke_environment, timeout=30)
             if completed.returncode != 0 or "vibeslopik-host" not in (completed.stdout + completed.stderr).lower():
                 raise SystemExit(f"Host executable smoke test failed: {completed.stdout}\n{completed.stderr}")
             runtime = Path(directory) / "runtime-test"

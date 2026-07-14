@@ -79,7 +79,7 @@ class RelayAgent(threading.Thread):
                 message = str(error).lower()
                 if "request not found" not in message and "relay http 404" not in message:
                     self._log("reply_failed", request_id=request.get("requestId", ""), error=error)
-                    raise
+                    return
                 self._log("late_reply_ignored", request_id=request.get("requestId", ""))
 
     def _register(self, relay: dict, host_secret: str) -> None:

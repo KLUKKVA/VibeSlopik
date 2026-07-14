@@ -70,6 +70,10 @@ def main() -> int:
             with urllib.request.urlopen(req, timeout=20) as response:
                 media_payload = json.loads(response.read())
             assert response.status == 200 and media_payload["mime"] == "image/jpeg" and media_payload["base64"]
+            # A phone can close its request before Host finishes. The relay
+            # then legitimately returns 404 to a late reply; this must not
+            # crash the delivery thread or reconnect the whole agent.
+            agent._deliver({"requestId": "expired-request", "method": "GET", "path": "/api/capabilities", "query": ""}, {"X-VibeSlopik-Host-Secret": "host-secret"})
             relay.terminate()
             relay.wait(timeout=5)
             relay = subprocess.Popen(relay_command, cwd=REPO, env=relay_environment, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
@@ -85,10 +89,6 @@ def main() -> int:
                     if time.time() >= deadline:
                         raise RuntimeError("Host agent did not reconnect after Relay restart")
                     time.sleep(0.5)
-            # A phone can close its request before Host finishes. The relay
-            # then legitimately returns 404 to a late reply; this must not
-            # crash the delivery thread or reconnect the whole agent.
-            agent._deliver({"requestId": "expired-request", "method": "GET", "path": "/api/capabilities", "query": ""}, {"X-VibeSlopik-Host-Secret": "host-secret"})
             relay_log = (root / "data" / "logs" / "relay-agent.jsonl").read_text(encoding="utf-8")
             assert "relay_connected" in relay_log and "late_reply_ignored" in relay_log
             assert store.client_token not in relay_log and "host-secret" not in relay_log and "admin" not in relay_log
