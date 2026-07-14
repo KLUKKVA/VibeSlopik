@@ -109,6 +109,7 @@ rollback_install() {
         systemctl disable vibeslopik-relay.service >/dev/null 2>&1 || true
     fi
     if [ "$WAS_ACTIVE" = "1" ]; then
+        systemctl reset-failed vibeslopik-relay.service >/dev/null 2>&1 || true
         systemctl restart vibeslopik-relay.service >/dev/null 2>&1 || true
         ROLLBACK_TIMEOUT=${VIBESLOPIK_RELAY_ROLLBACK_TIMEOUT:-20}
         case "$ROLLBACK_TIMEOUT" in *[!0-9]*|'') ROLLBACK_TIMEOUT=20 ;; esac
