@@ -72,14 +72,14 @@ jobs:
           sudo vibeslopik-relay diagnostics
           sudo vibeslopik-relay set-port 18789
           curl --fail http://127.0.0.1:18789/healthz
-          cp /etc/vibeslopik-relay.env /tmp/relay-env.before
-          cp /opt/vibeslopik-relay/vibeslopik-relay /tmp/relay-bin.before
+          sudo cp /etc/vibeslopik-relay.env /tmp/relay-env.before
+          sudo cp /opt/vibeslopik-relay/vibeslopik-relay /tmp/relay-bin.before
           if sudo env VIBESLOPIK_RELAY_BINARY=/tmp/broken-relay VIBESLOPIK_RELAY_INSTALL_PORT=18790 VIBESLOPIK_RELAY_READY_TIMEOUT=2 VIBESLOPIK_LANG=en sh scripts/install-relay-vps.sh </dev/null; then
             echo "Broken upgrade unexpectedly succeeded" >&2
             exit 1
           fi
-          cmp /tmp/relay-env.before /etc/vibeslopik-relay.env
-          cmp /tmp/relay-bin.before /opt/vibeslopik-relay/vibeslopik-relay
+          sudo cmp /tmp/relay-env.before /etc/vibeslopik-relay.env
+          sudo cmp /tmp/relay-bin.before /opt/vibeslopik-relay/vibeslopik-relay
           curl --fail http://127.0.0.1:18789/healthz
           sudo vibeslopik-relay uninstall --keep-data
           sudo rm -rf /opt/vibeslopik-relay /etc/vibeslopik-relay.env
